@@ -8,6 +8,7 @@ import sys
 
 sys.path.append("python/")
 import needle as ndl
+# from ..python import needle as ndl
 
 
 def parse_mnist(image_filesname, label_filename):
@@ -32,12 +33,21 @@ def parse_mnist(image_filesname, label_filename):
                 labels of the examples.  Values should be of type np.int8 and
                 for MNIST will contain the values 0-9.
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    with gzip.open(label_filename, "rb") as f:
+        _, num = struct.unpack(">II", f.read(8))
+        y = np.frombuffer(f.read(), dtype=np.uint8).astype(np.int8)
+    with gzip.open(image_filesname, "rb") as f:
+        _, num, rows, cols = struct.unpack(">IIII", f.read(16))
+        X = (
+            np.frombuffer(f.read(), dtype=np.uint8)
+            .astype(np.float32)
+            .reshape(num, rows * cols)
+            / 255.0
+        )
+    return X, y
 
 
-def softmax_loss(Z, y_one_hot):
+def softmax_loss(Z: ndl.Tensor, y_one_hot: ndl.Tensor):
     """Return softmax loss.  Note that for the purposes of this assignment,
     you don't need to worry about "nicely" scaling the numerical properties
     of the log-sum-exp computation, but can just compute this directly.
@@ -53,9 +63,11 @@ def softmax_loss(Z, y_one_hot):
     Returns:
         Average softmax loss over the sample. (ndl.Tensor[np.float32])
     """
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    # log-sum-exp over classes for each sample: log(sum_j exp(z_j))
+    log_sum_exp = ndl.log(ndl.exp(Z).sum(axes=(1,)))  # shape: (batch_size,)
+    z_true = (Z * y_one_hot).sum(axes=(1,))  # shape: (batch_size,)
+    loss_vec = log_sum_exp - z_true
+    return ndl.summation(loss_vec) / Z.shape[0]
 
 
 def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
@@ -81,10 +93,28 @@ def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
             W1: ndl.Tensor[np.float32]
             W2: ndl.Tensor[np.float32]
     """
+    num_examples = X.shape[0]
 
-    ### BEGIN YOUR SOLUTION
-    raise NotImplementedError()
-    ### END YOUR SOLUTION
+    for i in range(0, num_examples, batch):
+        X_batch = ndl.Tensor(X[i:i+batch].astype(np.float32))
+        y_batch = y[i:i+batch]
+        logits = ndl.relu(X_batch.matmul(W1)).matmul(W2)
+
+        y_one_hot = np.zeros((y_batch.shape[0], logits.shape[-1]))
+        y_one_hot[np.arange(y_batch.size), y_batch] = 1
+        y_ = ndl.Tensor(y_one_hot)
+        loss = softmax_loss(logits, y_)
+        loss.backward()
+
+        update1 =  W1.grad.numpy() 
+        update2 =  W2.grad.numpy() 
+        assert(update1.shape == W1.shape)
+        assert(update2.shape == W2.shape)
+
+        W1 = W1 - update1 * lr
+        W2 = W2 - update2 * lr
+
+    return W1, W2
 
 
 ### CODE BELOW IS FOR ILLUSTRATION, YOU DO NOT NEED TO EDIT
